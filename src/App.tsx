@@ -194,12 +194,12 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col gap-8">
+      <main className="max-w-[1600px] mx-auto px-3 sm:px-5 lg:px-6 py-5">
+        <div className="flex flex-col gap-5">
           
-          {/* Cameras Row */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-            <div className="flex flex-col">
+          {/* Cameras Row (Side-by-side on lg/xl screens with equal stretch) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 xl:gap-5 items-stretch">
+            <div className="h-full flex flex-col">
               <CameraFeed 
                 id="cam1" 
                 title="Câmera 1 (Visão Superior)" 
@@ -212,7 +212,7 @@ export default function App() {
               />
             </div>
             
-            <div className="flex flex-col">
+            <div className="h-full flex flex-col">
               <CameraFeed 
                 id="cam2" 
                 title="Câmera 2 (Visão Perfil)" 

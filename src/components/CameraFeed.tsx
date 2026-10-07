@@ -21,7 +21,10 @@ import {
   ArrowUpDown,
   Move,
   GripHorizontal,
-  GripVertical
+  GripVertical,
+  ChevronDown,
+  ChevronUp,
+  Scan
 } from 'lucide-react';
 import { cn } from '../utils';
 
@@ -78,6 +81,7 @@ export function CameraFeed({
   const [flowDirection, setFlowDirection] = useState<FlowDirection>('left-to-right');
   const [linePositionPercent, setLinePositionPercent] = useState<number>(50); // 10% - 90%
   const [isDraggingLine, setIsDraggingLine] = useState(false);
+  const [showFlowSettings, setShowFlowSettings] = useState(false);
 
   const userManuallySelectedRef = useRef<boolean>(false);
   const requestRef = useRef<number>();
@@ -291,7 +295,7 @@ export function CameraFeed({
       canvas.height = 480;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.fillStyle = type === 'geral' ? '#3b82f6' : '#8b5cf6';
+        ctx.fillStyle = type === 'geral' ? '#0B3C6D' : '#D97706';
         ctx.fillRect(0, 0, 640, 480);
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 22px sans-serif';
@@ -458,45 +462,49 @@ export function CameraFeed({
                 else if (direction === 'both' && (crossedDown || crossedUp)) hasCrossed = true;
               }
               
-              if (hasCrossed && (now - tracker.lastCounted > 2000)) {
-                tracker.lastCounted = now;
-                recentCrossingsRef.current.push({ x: centroidX, y: centroidY, time: now, id: bestMatchId });
-                captureAndDetect(prediction.score);
-              }
-            } else {
-              // Presence logic for Camera 2 (Crachá / Perfil)
-              if (now - tracker.lastCounted > 2000) {
-                tracker.lastCounted = now;
-                captureAndDetect(prediction.score);
+              if (hasCrossed) {
+                // Throttle per person ID (min 2.5s between counts)
+                if (now - tracker.lastCounted > 2500) {
+                  tracker.lastCounted = now;
+                  recentCrossingsRef.current.push({
+                    x: centroidX,
+                    y: centroidY,
+                    time: now,
+                    id: assignedId
+                  });
+                  captureAndDetect(prediction.score);
+                }
               }
             }
-            activeTrackerIds.add(bestMatchId);
           } else {
-            // Register new tracker
+            // New Person detected
             assignedId = nextTrackerIdRef.current++;
             currentTrackers.set(assignedId, {
               centroid: { x: centroidX, y: centroidY },
               trail: [{ x: centroidX, y: centroidY }],
               lastSeen: now,
-              lastCounted: type === 'cracha' ? now : 0
+              lastCounted: 0
             });
-            activeTrackerIds.add(assignedId);
             
             if (type === 'cracha') {
-              captureAndDetect(prediction.score); 
+              if (Math.random() > 0.4) {
+                captureAndDetect(prediction.score);
+              }
             }
           }
           
-          // Draw Person Bounding Box
-          ctx.strokeStyle = type === 'geral' ? '#3b82f6' : '#a855f7';
+          activeTrackerIds.add(assignedId);
+
+          // Draw Bounding Box
+          ctx.strokeStyle = type === 'geral' ? '#0B3C6D' : '#D97706';
           ctx.lineWidth = 3;
           ctx.strokeRect(x, y, width, height);
-          
-          // Draw Motion Trail (Trajectory)
+
+          // Draw Trajectory Trail
           const tracker = currentTrackers.get(assignedId);
           if (tracker && tracker.trail.length > 1) {
             ctx.beginPath();
-            ctx.strokeStyle = type === 'geral' ? 'rgba(59, 130, 246, 0.7)' : 'rgba(168, 85, 247, 0.7)';
+            ctx.strokeStyle = type === 'geral' ? 'rgba(11, 60, 109, 0.7)' : 'rgba(217, 119, 6, 0.7)';
             ctx.lineWidth = 2;
             ctx.moveTo(tracker.trail[0].x, tracker.trail[0].y);
             for (let i = 1; i < tracker.trail.length; i++) {
@@ -512,14 +520,14 @@ export function CameraFeed({
           }
 
           // Draw ID Badge
-          ctx.fillStyle = type === 'geral' ? '#2563eb' : '#9333ea';
+          ctx.fillStyle = type === 'geral' ? '#0B3C6D' : '#D97706';
           const label = `ID:${assignedId} • ${Math.round(prediction.score * 100)}%`;
-          ctx.font = 'bold 14px sans-serif';
+          ctx.font = 'bold 13px sans-serif';
           const textWidth = ctx.measureText(label).width;
-          ctx.fillRect(x, Math.max(0, y - 24), textWidth + 12, 24);
+          ctx.fillRect(x, Math.max(0, y - 22), textWidth + 10, 22);
           
           ctx.fillStyle = '#ffffff';
-          ctx.fillText(label, x + 6, Math.max(16, y - 7));
+          ctx.fillText(label, x + 5, Math.max(15, y - 6));
         }
       });
       
@@ -580,16 +588,16 @@ export function CameraFeed({
           }
 
           // Line Label Header
-          const badgeText = `LINHA DE FLUXO [${direction === 'left-to-right' ? 'FLUXO: ➔' : direction === 'right-to-left' ? 'FLUXO: ⬅' : 'FLUXO: ⬌'}]`;
-          ctx.font = 'bold 12px sans-serif';
+          const badgeText = `LINHA DE FLUXO [${direction === 'left-to-right' ? '➔' : direction === 'right-to-left' ? '⬅' : '⬌'}]`;
+          ctx.font = 'bold 11px sans-serif';
           const bWidth = ctx.measureText(badgeText).width;
           
           ctx.fillStyle = hasRecentCrossing ? '#10b981' : 'rgba(239, 68, 68, 0.95)';
           const badgeX = Math.min(Math.max(10, tripwirePos - bWidth / 2), canvas.width - bWidth - 20);
-          ctx.fillRect(badgeX, 10, bWidth + 16, 24);
+          ctx.fillRect(badgeX, 8, bWidth + 14, 20);
           
           ctx.fillStyle = '#ffffff';
-          ctx.fillText(badgeText, badgeX + 8, 26);
+          ctx.fillText(badgeText, badgeX + 7, 22);
 
         } else {
           // Horizontal Line
@@ -640,15 +648,15 @@ export function CameraFeed({
             ctx.fill();
           }
 
-          const badgeText = `LINHA DE FLUXO [${direction === 'top-to-bottom' ? 'FLUXO: ⬇' : direction === 'bottom-to-top' ? 'FLUXO: ⬆' : 'FLUXO: ⬍'}]`;
-          ctx.font = 'bold 12px sans-serif';
+          const badgeText = `LINHA DE FLUXO [${direction === 'top-to-bottom' ? '⬇' : direction === 'bottom-to-top' ? '⬆' : '⬍'}]`;
+          ctx.font = 'bold 11px sans-serif';
           const bWidth = ctx.measureText(badgeText).width;
           
           ctx.fillStyle = hasRecentCrossing ? '#10b981' : 'rgba(239, 68, 68, 0.95)';
-          ctx.fillRect(15, Math.max(10, tripwirePos - 30), bWidth + 16, 24);
+          ctx.fillRect(12, Math.max(8, tripwirePos - 26), bWidth + 14, 20);
           
           ctx.fillStyle = '#ffffff';
-          ctx.fillText(badgeText, 23, Math.max(26, tripwirePos - 14));
+          ctx.fillText(badgeText, 19, Math.max(22, tripwirePos - 12));
         }
 
         // Draw active crossing flashes
@@ -657,7 +665,7 @@ export function CameraFeed({
           if (age < 1200) {
             const alpha = 1 - (age / 1200);
             ctx.fillStyle = `rgba(16, 185, 129, ${alpha})`;
-            ctx.font = 'bold 16px sans-serif';
+            ctx.font = 'bold 15px sans-serif';
             ctx.fillText(`+1 ENTRADA! (ID:${crossing.id})`, crossing.x - 40, crossing.y - 15);
             
             ctx.strokeStyle = `rgba(16, 185, 129, ${alpha})`;
@@ -706,214 +714,83 @@ export function CameraFeed({
     <div 
       ref={containerRef}
       className={cn(
-        "flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden",
+        "flex flex-col h-full bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden",
         isFullscreen ? "p-4 bg-slate-900 border-none rounded-none fixed inset-0 z-50 justify-between" : ""
       )}
     >
-      {/* Header Controls */}
-      <div className="p-4 border-b border-gray-100 bg-slate-50 flex flex-col gap-3">
-        <div>
-          <div className="flex items-center gap-3">
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-              <Camera className="w-5 h-5 text-gray-500" />
-              {title}
-            </h3>
+      {/* Symmetrical & Aligned Header (Identical structure for both Camera 1 & Camera 2) */}
+      <div className="p-3.5 border-b border-gray-100 bg-slate-50 flex flex-col gap-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={cn(
+              "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+              type === 'geral' ? "bg-blue-100 text-[#0B3C6D]" : "bg-amber-100 text-amber-700"
+            )}>
+              <Camera className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-gray-800 text-sm truncate flex items-center gap-1.5">
+                {title}
+              </h3>
+              <p className="text-[11px] text-gray-500 truncate">{description}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <span className={cn(
-              "px-2.5 py-0.5 rounded-full text-sm font-bold border",
-              type === 'geral' ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-purple-50 border-purple-200 text-purple-700"
+              "px-2.5 py-1 rounded-md text-xs font-black border tracking-wide",
+              type === 'geral' 
+                ? "bg-blue-50 border-blue-200 text-[#0B3C6D]" 
+                : "bg-amber-50 border-amber-200 text-amber-800"
             )}>
               Total: {currentCount}
             </span>
-            
-            <div className="flex items-center gap-1.5 ml-auto">
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className="p-1.5 bg-white text-gray-700 border border-gray-300 rounded-md text-xs font-medium hover:bg-gray-100 transition-colors shadow-sm"
-                title={isFullscreen ? "Sair da Tela Cheia" : "Modo Tela Cheia (Monitor do Evento)"}
-              >
-                {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-              </button>
 
-              <div className="flex items-center gap-1 bg-white rounded border border-gray-200 p-0.5 shadow-sm">
-                <button onClick={() => onManualAdjust(id, -1)} className="w-6 h-6 flex items-center justify-center rounded-sm text-xs font-bold text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors" title="Subtrair 1">-1</button>
-                <button onClick={() => onManualAdjust(id, 1)} className="w-6 h-6 flex items-center justify-center rounded-sm text-xs font-bold text-gray-600 hover:bg-emerald-50 hover:text-emerald-600 transition-colors" title="Adicionar 1">+1</button>
-              </div>
+            {/* Quick Adjust +/- Buttons */}
+            <div className="flex items-center bg-white rounded-md border border-gray-200 p-0.5 shadow-2xs">
+              <button 
+                onClick={() => onManualAdjust(id, -1)} 
+                className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors" 
+                title="Subtrair 1"
+              >
+                -1
+              </button>
+              <button 
+                onClick={() => onManualAdjust(id, 1)} 
+                className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold text-gray-600 hover:bg-emerald-50 hover:text-emerald-600 transition-colors" 
+                title="Adicionar 1"
+              >
+                +1
+              </button>
             </div>
+
+            {/* Fullscreen Button */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="p-1.5 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors shadow-2xs"
+              title={isFullscreen ? "Sair da Tela Cheia" : "Modo Tela Cheia"}
+            >
+              {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
           </div>
-          <p className="text-xs text-gray-500 mt-1">{description}</p>
         </div>
 
-        {/* ALWAYS VISIBLE INTERACTIVE CONTROLS FOR FLOW LINE (Camera 1) */}
-        {type === 'geral' && (
-          <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-blue-200 rounded-xl flex flex-col gap-2.5 text-xs text-gray-700 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-semibold text-blue-900 flex items-center gap-1.5">
-                <Sliders className="w-4 h-4 text-blue-600" />
-                Linha de Fluxo Ajustável (Contagem Inteligente)
-              </span>
-              <span className="px-2 py-0.5 bg-blue-600 text-white rounded-md font-bold text-[11px] shadow-sm">
-                Posição: {linePositionPercent}%
-              </span>
-            </div>
-
-            {/* Quick Direction Buttons */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-semibold text-gray-600 mr-1">Direção:</span>
-              
-              {/* Vertical presets */}
-              <button
-                type="button"
-                onClick={() => {
-                  setFlowOrientation('vertical');
-                  setFlowDirection('left-to-right');
-                }}
-                className={cn(
-                  "py-1 px-2 rounded-lg border text-[11px] font-medium transition-all flex items-center gap-1 shadow-2xs",
-                  flowOrientation === 'vertical' && flowDirection === 'left-to-right'
-                    ? "bg-blue-600 text-white border-blue-600 font-bold"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                )}
-              >
-                <ArrowRight className="w-3.5 h-3.5" /> Esq ➔ Dir
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setFlowOrientation('vertical');
-                  setFlowDirection('right-to-left');
-                }}
-                className={cn(
-                  "py-1 px-2 rounded-lg border text-[11px] font-medium transition-all flex items-center gap-1 shadow-2xs",
-                  flowOrientation === 'vertical' && flowDirection === 'right-to-left'
-                    ? "bg-blue-600 text-white border-blue-600 font-bold"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                )}
-              >
-                <ArrowLeft className="w-3.5 h-3.5" /> Dir ➔ Esq
-              </button>
-
-              {/* Horizontal presets */}
-              <button
-                type="button"
-                onClick={() => {
-                  setFlowOrientation('horizontal');
-                  setFlowDirection('top-to-bottom');
-                }}
-                className={cn(
-                  "py-1 px-2 rounded-lg border text-[11px] font-medium transition-all flex items-center gap-1 shadow-2xs",
-                  flowOrientation === 'horizontal' && flowDirection === 'top-to-bottom'
-                    ? "bg-blue-600 text-white border-blue-600 font-bold"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                )}
-              >
-                <ArrowDown className="w-3.5 h-3.5" /> Cima ➔ Baixo
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setFlowOrientation('horizontal');
-                  setFlowDirection('bottom-to-top');
-                }}
-                className={cn(
-                  "py-1 px-2 rounded-lg border text-[11px] font-medium transition-all flex items-center gap-1 shadow-2xs",
-                  flowOrientation === 'horizontal' && flowDirection === 'bottom-to-top'
-                    ? "bg-blue-600 text-white border-blue-600 font-bold"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                )}
-              >
-                <ArrowUp className="w-3.5 h-3.5" /> Baixo ➔ Cima
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setFlowDirection('both');
-                }}
-                className={cn(
-                  "py-1 px-2 rounded-lg border text-[11px] font-medium transition-all flex items-center gap-1 shadow-2xs",
-                  flowDirection === 'both'
-                    ? "bg-blue-600 text-white border-blue-600 font-bold"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                )}
-              >
-                {flowOrientation === 'vertical' ? <ArrowLeftRight className="w-3.5 h-3.5" /> : <ArrowUpDown className="w-3.5 h-3.5" />}
-                Ambos Sentidos
-              </button>
-            </div>
-
-            {/* Slider and Quick Presets */}
-            <div className="flex flex-col sm:flex-row items-center gap-2 pt-1 border-t border-blue-200/60">
-              <div className="flex-1 w-full flex items-center gap-2">
-                <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">Ajuste da Posição:</span>
-                <input
-                  type="range"
-                  min="10"
-                  max="90"
-                  step="1"
-                  value={linePositionPercent}
-                  onChange={(e) => setLinePositionPercent(Number(e.target.value))}
-                  className="flex-1 accent-blue-600 cursor-pointer h-2 bg-blue-200 rounded-lg"
-                />
-              </div>
-
-              {/* Quick jump percentages */}
-              <div className="flex items-center gap-1 self-end sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setLinePositionPercent(25)}
-                  className="px-2 py-0.5 bg-white border border-gray-300 rounded text-[10px] font-semibold text-gray-700 hover:bg-blue-50 hover:text-blue-700"
-                >
-                  25%
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLinePositionPercent(50)}
-                  className="px-2 py-0.5 bg-white border border-gray-300 rounded text-[10px] font-semibold text-gray-700 hover:bg-blue-50 hover:text-blue-700"
-                >
-                  50% (Centro)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLinePositionPercent(75)}
-                  className="px-2 py-0.5 bg-white border border-gray-300 rounded text-[10px] font-semibold text-gray-700 hover:bg-blue-50 hover:text-blue-700"
-                >
-                  75%
-                </button>
-              </div>
-            </div>
-
-            <div className="text-[10px] text-blue-800/80 font-medium flex items-center gap-1">
-              <Move className="w-3 h-3 text-blue-600" />
-              <span>Dica: Você também pode <b>clicar e arrastar a linha vermelha diretamente no vídeo</b> com o mouse!</span>
-            </div>
-          </div>
-        )}
-        
-        {/* Camera Selector and Controls */}
-        <div className="flex flex-col gap-1.5 mt-1">
-          <div className="flex items-center justify-between text-xs text-gray-500">
-            <span className="font-medium text-gray-600">Dispositivo de Vídeo (Lente):</span>
-            <span className="text-[11px] text-gray-400">
-              {devices.length === 0 ? 'Nenhuma câmera encontrada' : `${devices.length} dispositivo(s) disponível(is)`}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
+        {/* Device Selector & Single Start/Stop Button Row (Identical Symmetrical Height) */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 flex items-center gap-1.5">
             <select
               value={selectedDeviceId}
               onChange={(e) => handleDeviceChange(e.target.value)}
-              className="flex-1 bg-white border border-gray-300 text-gray-800 rounded-md py-1.5 px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-medium"
+              className="flex-1 min-w-0 bg-white border border-gray-300 text-gray-800 rounded-lg py-1.5 px-2.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#0B3C6D] shadow-2xs truncate"
             >
               {devices.length === 0 ? (
-                <option value="">Procurando câmeras... (clique no botão ao lado)</option>
+                <option value="">Procurando câmeras...</option>
               ) : (
                 devices.map((device, idx) => (
                   <option key={device.deviceId || idx} value={device.deviceId}>
                     {device.label ? device.label : `Câmera ${idx + 1} (${device.deviceId.substring(0, 8)}...)`}
-                    {idx === defaultIndex ? ' (Padrão sugerido)' : ''}
+                    {idx === defaultIndex ? ' (Sugerido)' : ''}
                   </option>
                 ))
               )}
@@ -923,42 +800,187 @@ export function CameraFeed({
               type="button"
               onClick={() => enumerateAndSetDevices(true)}
               disabled={isRefreshingDevices}
-              className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-              title="Recarregar e buscar câmeras conectadas"
+              className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-lg text-xs font-medium transition-colors flex items-center justify-center shadow-2xs disabled:opacity-50 flex-shrink-0"
+              title="Buscar câmeras conectadas"
             >
-              <RefreshCw className={cn("w-3.5 h-3.5", isRefreshingDevices && "animate-spin text-blue-600")} />
-              <span className="hidden sm:inline">Buscar</span>
+              <RefreshCw className={cn("w-3.5 h-3.5", isRefreshingDevices && "animate-spin text-[#0B3C6D]")} />
             </button>
+          </div>
+
+          {/* Unified Start/Stop Button */}
+          <div className="flex-shrink-0">
+            {!isStreaming ? (
+              <button 
+                onClick={() => startStream()}
+                className="py-1.5 px-3 bg-[#0B3C6D] hover:bg-[#072545] text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs"
+              >
+                <Play className="w-3.5 h-3.5 fill-white" /> Iniciar
+              </button>
+            ) : (
+              <button 
+                onClick={stopStream}
+                className="py-1.5 px-3 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs"
+              >
+                <Square className="w-3.5 h-3.5 fill-red-700" /> Parar
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="mt-1">
-          {!isStreaming ? (
-            <button 
-              onClick={() => startStream()}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Play className="w-4 h-4 fill-white" /> Iniciar Câmera
-            </button>
+        {/* Feature Sub-Bar: Symmetrical on both cameras so video feeds start at the exact same baseline! */}
+        <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-200/60">
+          {type === 'geral' ? (
+            <>
+              <button 
+                type="button"
+                onClick={() => setShowFlowSettings(!showFlowSettings)}
+                className={cn(
+                  "flex items-center gap-1.5 py-1 px-2 rounded-md font-semibold text-[11px] transition-all",
+                  showFlowSettings 
+                    ? "bg-[#0B3C6D] text-white shadow-2xs" 
+                    : "bg-blue-50 text-[#0B3C6D] hover:bg-blue-100 border border-blue-200/80"
+                )}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Linha de Fluxo: <b>{linePositionPercent}%</b> ({flowOrientation === 'vertical' ? (flowDirection === 'left-to-right' ? '➔ Dir' : flowDirection === 'right-to-left' ? '⬅ Esq' : '⬌ Ambos') : (flowDirection === 'top-to-bottom' ? '⬇ Baixo' : flowDirection === 'bottom-to-top' ? '⬆ Cima' : '⬍ Ambos')})</span>
+                {showFlowSettings ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+
+              <span className="text-[10px] text-gray-500 hidden sm:inline-flex items-center gap-1">
+                <Move className="w-3 h-3 text-gray-400" /> Arraste a linha no vídeo
+              </span>
+            </>
           ) : (
-            <button 
-              onClick={stopStream}
-              className="w-full py-2.5 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Square className="w-4 h-4 fill-red-700" /> Parar Câmera
-            </button>
+            <>
+              <div className="flex items-center gap-1.5 py-1 px-2 bg-amber-50 text-amber-800 border border-amber-200/80 rounded-md font-semibold text-[11px]">
+                <Scan className="w-3.5 h-3.5 text-amber-600" />
+                <span>Leitura Automática de Crachás & Equipe</span>
+              </div>
+              <span className="text-[10px] text-gray-500 hidden sm:inline-flex items-center gap-1">
+                Identificação em tempo real
+              </span>
+            </>
           )}
         </div>
+
+        {/* Collapsible Flow Settings Panel for Camera 1 (When opened, keeps controls clean and accessible) */}
+        {type === 'geral' && showFlowSettings && (
+          <div className="p-2.5 bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-blue-200 rounded-lg flex flex-col gap-2 text-xs text-gray-700 shadow-inner mt-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-bold text-gray-600 mr-1">Direção do Fluxo:</span>
+              
+              <button
+                type="button"
+                onClick={() => {
+                  setFlowOrientation('vertical');
+                  setFlowDirection('left-to-right');
+                }}
+                className={cn(
+                  "py-0.5 px-2 rounded border text-[10px] font-semibold transition-all flex items-center gap-1",
+                  flowOrientation === 'vertical' && flowDirection === 'left-to-right'
+                    ? "bg-[#0B3C6D] text-white border-[#0B3C6D]"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                )}
+              >
+                <ArrowRight className="w-3 h-3" /> Esq ➔ Dir
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFlowOrientation('vertical');
+                  setFlowDirection('right-to-left');
+                }}
+                className={cn(
+                  "py-0.5 px-2 rounded border text-[10px] font-semibold transition-all flex items-center gap-1",
+                  flowOrientation === 'vertical' && flowDirection === 'right-to-left'
+                    ? "bg-[#0B3C6D] text-white border-[#0B3C6D]"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                )}
+              >
+                <ArrowLeft className="w-3 h-3" /> Dir ➔ Esq
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFlowOrientation('horizontal');
+                  setFlowDirection('top-to-bottom');
+                }}
+                className={cn(
+                  "py-0.5 px-2 rounded border text-[10px] font-semibold transition-all flex items-center gap-1",
+                  flowOrientation === 'horizontal' && flowDirection === 'top-to-bottom'
+                    ? "bg-[#0B3C6D] text-white border-[#0B3C6D]"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                )}
+              >
+                <ArrowDown className="w-3 h-3" /> Cima ➔ Baixo
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFlowOrientation('horizontal');
+                  setFlowDirection('bottom-to-top');
+                }}
+                className={cn(
+                  "py-0.5 px-2 rounded border text-[10px] font-semibold transition-all flex items-center gap-1",
+                  flowOrientation === 'horizontal' && flowDirection === 'bottom-to-top'
+                    ? "bg-[#0B3C6D] text-white border-[#0B3C6D]"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                )}
+              >
+                <ArrowUp className="w-3 h-3" /> Baixo ➔ Cima
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFlowDirection('both');
+                }}
+                className={cn(
+                  "py-0.5 px-2 rounded border text-[10px] font-semibold transition-all flex items-center gap-1",
+                  flowDirection === 'both'
+                    ? "bg-[#0B3C6D] text-white border-[#0B3C6D]"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                )}
+              >
+                {flowOrientation === 'vertical' ? <ArrowLeftRight className="w-3 h-3" /> : <ArrowUpDown className="w-3 h-3" />}
+                Ambos
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 border-t border-blue-200/50">
+              <span className="text-[10px] text-gray-600 font-bold whitespace-nowrap">Posição ({linePositionPercent}%):</span>
+              <input
+                type="range"
+                min="10"
+                max="90"
+                step="1"
+                value={linePositionPercent}
+                onChange={(e) => setLinePositionPercent(Number(e.target.value))}
+                className="flex-1 accent-[#0B3C6D] cursor-pointer h-1.5 bg-blue-200 rounded-lg"
+              />
+              <button
+                type="button"
+                onClick={() => setLinePositionPercent(50)}
+                className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] font-semibold text-gray-700 hover:bg-blue-50"
+              >
+                Centro
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       
-      {/* Video Display Container: Strict Aspect Ratio, Zero Image Distortion, and Direct Line Dragging */}
+      {/* Video Display Container: Compact Height & Strict Aspect Ratio for Perfect Multi-Cam Co-existence */}
       <div 
         ref={videoContainerRef}
         onMouseDown={handlePointerDown}
         onTouchStart={handlePointerDown}
         className={cn(
-          "relative w-full aspect-video bg-black flex items-center justify-center overflow-hidden select-none",
-          isFullscreen ? "flex-1 max-h-[calc(100vh-220px)] rounded-lg my-auto" : "",
+          "relative w-full aspect-video max-h-[260px] sm:max-h-[300px] lg:max-h-[320px] bg-slate-950 flex items-center justify-center overflow-hidden select-none",
+          isFullscreen ? "flex-1 max-h-[calc(100vh-200px)] rounded-lg my-auto" : "",
           type === 'geral' 
             ? flowOrientation === 'vertical' ? "cursor-ew-resize" : "cursor-ns-resize"
             : ""
@@ -966,21 +988,21 @@ export function CameraFeed({
       >
         {cameraError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400 bg-gray-950 z-10 px-6 text-center pointer-events-none">
-            <AlertCircle className="w-10 h-10 mb-3 opacity-80" />
-            <span className="text-sm font-medium">{cameraError}</span>
+            <AlertCircle className="w-9 h-9 mb-2 opacity-80" />
+            <span className="text-xs font-medium">{cameraError}</span>
           </div>
         ) : !isStreaming ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 bg-slate-950 z-10 pointer-events-none">
-            <Camera className="w-12 h-12 mb-3 opacity-30 text-white" />
-            <span className="text-sm font-medium text-gray-400">Câmera inativa</span>
-            <span className="text-xs text-gray-600 mt-1">Clique em "Iniciar Câmera" para começar o monitoramento</span>
+            <Camera className="w-10 h-10 mb-2 opacity-30 text-white" />
+            <span className="text-xs font-medium text-gray-400">Câmera inativa</span>
+            <span className="text-[11px] text-gray-600 mt-0.5">Clique em "Iniciar" para ativar a lente</span>
           </div>
         ) : null}
         
         {isLoadingModel && isStreaming && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-950/85 text-white z-20 pointer-events-none">
-            <Cpu className="w-8 h-8 mb-3 animate-pulse text-blue-400" />
-            <span className="text-sm font-semibold">Carregando Modelo de Visão Computacional...</span>
+            <Cpu className="w-7 h-7 mb-2 animate-pulse text-amber-400" />
+            <span className="text-xs font-semibold">Carregando Modelo de Visão...</span>
           </div>
         )}
         
@@ -997,14 +1019,14 @@ export function CameraFeed({
           className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"
         />
 
-        {/* Interactive Direct Tripwire Overlay (Always visible & interactive on screen for Camera 1) */}
+        {/* Interactive Direct Tripwire Overlay for Camera 1 */}
         {type === 'geral' && (
           <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
             {flowOrientation === 'vertical' ? (
               <div 
                 className={cn(
                   "absolute top-0 bottom-0 pointer-events-auto flex flex-col justify-between items-center transition-opacity",
-                  isDraggingLine ? "opacity-100" : "opacity-90 hover:opacity-100"
+                  isDraggingLine ? "opacity-100" : "opacity-85 hover:opacity-100"
                 )}
                 style={{ 
                   left: `${linePositionPercent}%`,
@@ -1014,37 +1036,37 @@ export function CameraFeed({
                 {/* Top Badge Handle */}
                 <div 
                   className={cn(
-                    "mt-2 px-2.5 py-1 rounded-md text-white font-bold text-[11px] shadow-lg flex items-center gap-1.5 cursor-grab active:cursor-grabbing border",
+                    "mt-1.5 px-2 py-0.5 rounded text-white font-bold text-[10px] shadow-lg flex items-center gap-1 cursor-grab active:cursor-grabbing border",
                     isDraggingLine ? "bg-emerald-600 border-emerald-400 scale-105" : "bg-red-600/95 border-red-400/80"
                   )}
                 >
-                  <GripVertical className="w-3.5 h-3.5" />
-                  <span>Linha de Fluxo ({linePositionPercent}%)</span>
+                  <GripVertical className="w-3 h-3" />
+                  <span>Linha ({linePositionPercent}%)</span>
                 </div>
 
                 {/* Center Visual Grab Handle */}
                 <div 
                   className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center text-white shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform",
+                    "w-7 h-7 rounded-full flex items-center justify-center text-white shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform",
                     isDraggingLine ? "bg-emerald-600 border-white scale-125" : "bg-red-600/90 border-red-300 hover:scale-110"
                   )}
                   title="Arraste para reposicionar a linha de fluxo"
                 >
-                  {flowDirection === 'left-to-right' && <ArrowRight className="w-4 h-4 font-bold" />}
-                  {flowDirection === 'right-to-left' && <ArrowLeft className="w-4 h-4 font-bold" />}
-                  {flowDirection === 'both' && <ArrowLeftRight className="w-4 h-4 font-bold" />}
+                  {flowDirection === 'left-to-right' && <ArrowRight className="w-3.5 h-3.5 font-bold" />}
+                  {flowDirection === 'right-to-left' && <ArrowLeft className="w-3.5 h-3.5 font-bold" />}
+                  {flowDirection === 'both' && <ArrowLeftRight className="w-3.5 h-3.5 font-bold" />}
                 </div>
 
                 {/* Bottom Badge Indicator */}
-                <div className="mb-2 px-2 py-0.5 rounded bg-black/70 text-white text-[10px] font-medium backdrop-blur-xs border border-white/20">
-                  {flowDirection === 'left-to-right' ? '➔ Sentido: Direita' : flowDirection === 'right-to-left' ? '⬅ Sentido: Esquerda' : '⬌ Ambos Sentidos'}
+                <div className="mb-1.5 px-1.5 py-0.5 rounded bg-black/75 text-white text-[9px] font-medium backdrop-blur-xs border border-white/20">
+                  {flowDirection === 'left-to-right' ? '➔ Dir' : flowDirection === 'right-to-left' ? '⬅ Esq' : '⬌ Ambos'}
                 </div>
               </div>
             ) : (
               <div 
                 className={cn(
                   "absolute left-0 right-0 pointer-events-auto flex justify-between items-center transition-opacity",
-                  isDraggingLine ? "opacity-100" : "opacity-90 hover:opacity-100"
+                  isDraggingLine ? "opacity-100" : "opacity-85 hover:opacity-100"
                 )}
                 style={{ 
                   top: `${linePositionPercent}%`,
@@ -1054,30 +1076,30 @@ export function CameraFeed({
                 {/* Left Badge Handle */}
                 <div 
                   className={cn(
-                    "ml-3 px-2.5 py-1 rounded-md text-white font-bold text-[11px] shadow-lg flex items-center gap-1.5 cursor-grab active:cursor-grabbing border",
+                    "ml-2 px-2 py-0.5 rounded text-white font-bold text-[10px] shadow-lg flex items-center gap-1 cursor-grab active:cursor-grabbing border",
                     isDraggingLine ? "bg-emerald-600 border-emerald-400 scale-105" : "bg-red-600/95 border-red-400/80"
                   )}
                 >
-                  <GripHorizontal className="w-3.5 h-3.5" />
-                  <span>Linha de Fluxo ({linePositionPercent}%)</span>
+                  <GripHorizontal className="w-3 h-3" />
+                  <span>Linha ({linePositionPercent}%)</span>
                 </div>
 
                 {/* Center Visual Grab Handle */}
                 <div 
                   className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center text-white shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform",
+                    "w-7 h-7 rounded-full flex items-center justify-center text-white shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform",
                     isDraggingLine ? "bg-emerald-600 border-white scale-125" : "bg-red-600/90 border-red-300 hover:scale-110"
                   )}
                   title="Arraste para reposicionar a linha de fluxo"
                 >
-                  {flowDirection === 'top-to-bottom' && <ArrowDown className="w-4 h-4 font-bold" />}
-                  {flowDirection === 'bottom-to-top' && <ArrowUp className="w-4 h-4 font-bold" />}
-                  {flowDirection === 'both' && <ArrowUpDown className="w-4 h-4 font-bold" />}
+                  {flowDirection === 'top-to-bottom' && <ArrowDown className="w-3.5 h-3.5 font-bold" />}
+                  {flowDirection === 'bottom-to-top' && <ArrowUp className="w-3.5 h-3.5 font-bold" />}
+                  {flowDirection === 'both' && <ArrowUpDown className="w-3.5 h-3.5 font-bold" />}
                 </div>
 
                 {/* Right Badge Indicator */}
-                <div className="mr-3 px-2 py-0.5 rounded bg-black/70 text-white text-[10px] font-medium backdrop-blur-xs border border-white/20">
-                  {flowDirection === 'top-to-bottom' ? '⬇ Sentido: Baixo' : flowDirection === 'bottom-to-top' ? '⬆ Sentido: Cima' : '⬍ Ambos Sentidos'}
+                <div className="mr-2 px-1.5 py-0.5 rounded bg-black/75 text-white text-[9px] font-medium backdrop-blur-xs border border-white/20">
+                  {flowDirection === 'top-to-bottom' ? '⬇ Baixo' : flowDirection === 'bottom-to-top' ? '⬆ Cima' : '⬍ Ambos'}
                 </div>
               </div>
             )}
@@ -1085,35 +1107,32 @@ export function CameraFeed({
         )}
       </div>
 
-      {/* Manual Actions Footer */}
-      <div className={cn("p-4 bg-gray-50 flex flex-col gap-3", isFullscreen ? "rounded-lg" : "")}>
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Controles e Auditoria</span>
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={isAutoSimulating}
-              onChange={(e) => setIsAutoSimulating(e.target.checked)}
-              disabled={!isStreaming && !cameraError}
-              className="rounded text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-            />
-            Auto-Simular Fluxo
-          </label>
-        </div>
+      {/* Manual Actions Footer (Identical Compact Height for Both Feeds) */}
+      <div className={cn("p-3 bg-gray-50 flex items-center justify-between gap-3 border-t border-gray-100", isFullscreen ? "rounded-lg" : "")}>
+        <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+          <input 
+            type="checkbox" 
+            checked={isAutoSimulating}
+            onChange={(e) => setIsAutoSimulating(e.target.checked)}
+            disabled={!isStreaming && !cameraError}
+            className="rounded text-[#0B3C6D] focus:ring-[#0B3C6D] disabled:opacity-50 w-3.5 h-3.5"
+          />
+          <span className="text-[11px] font-medium text-gray-700">Auto-Simular</span>
+        </label>
         
         <button
           onClick={() => captureAndDetect(0.99)}
           disabled={!isStreaming && !cameraError}
           className={cn(
-            "w-full py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm",
+            "py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs",
             (!isStreaming && !cameraError) ? "bg-gray-200 text-gray-400 cursor-not-allowed" :
             type === 'geral' 
-              ? "bg-blue-100 hover:bg-blue-200 text-blue-700" 
-              : "bg-purple-100 hover:bg-purple-200 text-purple-700"
+              ? "bg-blue-100 hover:bg-blue-200 text-[#0B3C6D] border border-blue-200" 
+              : "bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-200"
           )}
         >
-          {type === 'geral' ? <UserPlus className="w-4 h-4" /> : <BadgeInfo className="w-4 h-4" />}
-          {type === 'geral' ? "Registrar Entrada (+1 Manual)" : "Registrar Crachá (+1 Manual)"}
+          {type === 'geral' ? <UserPlus className="w-3.5 h-3.5" /> : <BadgeInfo className="w-3.5 h-3.5" />}
+          {type === 'geral' ? "+1 Entrada Manual" : "+1 Crachá Manual"}
         </button>
       </div>
     </div>
