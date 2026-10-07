@@ -1,0 +1,10 @@
+{
+  "name": "JobVision Analytics",
+  "description": "Sistema de contagem por visão computacional para Feirão de Empregos.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
